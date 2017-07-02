@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WASM SHA512 bench</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/3.14.1/math.min.js"></script>
+    <style>
+        body {
+            display: flex;
+        }
+        div {
+            flex: 1 0;
+        }
+    </style>
+</head>
+<body>
+<script>
+    const resultsRow = (j, results) => {
+        const sizeDisplay = j >= 10 ? `${2**(j-10)}MB` : `${2**j}kB`;
+        return `
+            <th>${sizeDisplay}</th>
+            <td>${Math.round(math.mean(results) * 100) / 100}ms</td>
+            <td>${Math.round(math.median(results) * 100) / 100}ms</td>
+            <td>${Math.round(math.min(results) * 100) / 100}ms</td>
+            <td>${Math.round(math.max(results) * 100) / 100}ms</td>
+            <td>${Math.round(math.std(results) * 100) / 100}ms</td>
+        `;
+    };
+
+    const shaA = data => window.crypto.subtle.digest({ name: "SHA-512" }, data);
+
+    async function shaB(sha, buf, data) {
+        const inp = 65536;
+        const out = inp - 64;
+        buf.set(data, inp);
+        sha.SHA512(inp, data.length, out);
+        return buf.slice(out, out+64);
+    }
+    async function bench() {
+        for (let j = 12; j >= 0; j--) {
+            const size = 1024 * 2**j;
+            const a = new Uint8Array(size);
+
+            const results = [];
+            for (let i = 0; i < 40; i++) {
+                const t1 = performance.now();
+                await shaA(a);
+                const t2 = performance.now();
+                results.push(t2-t1);
+            }
+
+            const row = document.createElement('tr');
+            row.innerHTML = resultsRow(j, results);
+            document.querySelectorAll('#result tbody')[0].appendChild(row);
+        }
+
+        const resp = await fetch("sha512.wasm");
+        const buf1 = await resp.arrayBuffer();
+        const t3 = performance.now();
+        const buf2 = new Uint8Array(buf1);
+        const mem = new WebAssembly.Memory({initial: 100});
+        const buf = new Uint8Array(mem.buffer);
+        const x = await WebAssembly.instantiate(buf2, { env: { memory: mem } });
+        const sha = x.instance.exports;
+        const initTime = Math.round((performance.now() - t3) * 100) / 100;
+        document.getElementById('initTime').innerText = `Init time: ${initTime}ms`;
+
+        for (let j = 12; j >= 0; j--) {
+            const size = 1024 * 2**j;
+            const a = new Uint8Array(size);
+
+            const results = [];
+            for (let i = 0; i < 40; i++) {
+                const t1 = performance.now();
+                await shaB(sha, buf, a);
+                const t2 = performance.now();
+                results.push(t2-t1);
+            }
+
+            const row = document.createElement('tr');
+            row.innerHTML = resultsRow(j, results);
+            document.querySelectorAll('#result2 tbody')[0].appendChild(row);
+        }
+    }
+    bench();
+</script>
+<div>
+    <h2>WebCrypto</h2>
+    <table id="result">
+        <thead>
+        <tr>
+            <th>Message size</th>
+            <th>Mean Duration</th>
+            <th>Median Duration</th>
+            <th>Min Duration</th>
+            <th>Max Duration</th>
+            <th>Std Dev</th>
+        </tr>
+        </thead>
+        <thead>
+        <tbody></tbody>
+    </table>
+</div>
+<div>
+    <h2>WASM</h2>
+    <table id="result2">
+        <thead>
+        <tr>
+            <th>Message size</th>
+            <th>Mean Duration</th>
+            <th>Median Duration</th>
+            <th>Min Duration</th>
+            <th>Max Duration</th>
+            <th>Std Dev</th>
+        </tr>
+        </thead>
+        <thead>
+        <tbody></tbody>
+    </table><p id="initTime"></p>
+</div>
+</body>
+</html>
