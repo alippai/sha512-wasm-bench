@@ -3,7 +3,7 @@ const ctx_start = 1000;
 const inp_start = 2000;
 const out_start = inp_start - 64;
 
-class Sha512_WASM {
+class Sha512WASM {
   constructor() {
     if (!wasm)
       wasm = fetch("sha512.wasm");
@@ -43,15 +43,15 @@ class Sha512_WASM {
     return this.mem_buf.slice(out_start, inp_start);
   }
 
-  getWriteableStream(){
+  getWriteableStream() {
     const a = new WritableStream({
-      start: (controller) => { return this.reset(); },
-      write: (chunk, controller) => { return this.digest(chunk); },
-      close: (controller) => { a.result = this.finish(); return a.result;},
-      abort: (reason) => { return this.reset(); }
+      start: (controller) => this.reset(),
+      write: (chunk, controller) => this.digest(chunk),
+      close: (controller) => a.result = this.finish(),
+      abort: (reason) => this.reset(),
     }, {
       size: (arr) => arr.length,
-      highWaterMark: 1024000
+      highWaterMark: 1024000,
     });
 
     return a;

@@ -5,6 +5,7 @@
     <title>Sha512 WASM wrapper test</title>
     <style>
         #jank-meter {
+            margin: 10px 0;
             text-align: center;
             animation-direction: alternate;
             animation-duration: 1s;
@@ -17,15 +18,84 @@
             0% { letter-spacing: 0em; }
             100% { letter-spacing: 2em; }
         }
+        input[type=url] {
+            min-width: 400px;
+        }
     </style>
 </head>
 <body>
 <script type="text/javascript" src="Sha512_WASM.js"></script>
-
 <div id="jank-meter">JANK METER</div>
-<div id="log">
-
+<div>
+    <label for="dataUrl">URL:</label>
+    <input type="url" value="https://cachefly.cachefly.net/100mb.test" id="dataUrl" />
+    <input type="submit" id="startWasm" value="WASM" />
+    <input type="submit" id="startWebCrypto" value="WebCrypto API" />
 </div>
-<script type="text/javascript" src="test.js"></script>
+<pre id="result"></pre>
+<script>
+    let maxMemory = 0;
+    requestAnimationFrame(function onFrame() {
+        const currentMemory = performance.memory.usedJSHeapSize;
+        maxMemory = currentMemory > maxMemory ? currentMemory : maxMemory;
+        requestAnimationFrame(onFrame);
+    });
+
+    const tohex = s => Array.prototype.map.call(s, x => ('00' + x.toString(16)).slice(-2)).join('');
+
+    document.getElementById('startWasm').addEventListener('click', event => {
+        document.getElementById('result').innerText = 'Downloading and hashing...';
+        const url = document.getElementById('dataUrl').value;
+        maxMemory = 0;
+        wasmTest(url);
+
+        event.preventDefault();
+        return false;
+    }, true);
+    document.getElementById('startWebCrypto').addEventListener('click', event => {
+        document.getElementById('result').innerText = 'Downloading and hashing...';
+        const url = document.getElementById('dataUrl').value;
+        maxMemory = 0;
+        webCryptoTest(url);
+
+        event.preventDefault();
+        return false;
+    }, true);
+
+    async function wasmTest(url) {
+        const t0 = performance.now();
+
+        // Create the WASM instance
+        const a = new Sha512WASM();
+        await a.init();
+
+        // Create the WritableStream and pipe it
+        const st = a.getWriteableStream();
+        const res = await fetch(url);
+        await res.body.pipeTo(st);
+
+        const t1 = performance.now();
+        const hash = st.result;
+        document.getElementById('result').innerText = `Hash: ${tohex(hash)}\nTime: ${Math.round(t1-t0)}ms\nMax memory: ${maxMemory/1000000}MB`;
+    }
+
+    async function webCryptoTest(url) {
+        const t0 = performance.now();
+
+        // Get the file in one large chunk
+        const res = await fetch(url);
+        const data = await res.arrayBuffer();
+
+        // Digest
+        const hash = await window.crypto.subtle.digest({ name: "SHA-512" }, data);
+        const t1 = performance.now();
+
+        // Measure memory, the `data` is still available
+        const currentMemory = performance.memory.usedJSHeapSize;
+        maxMemory = currentMemory > maxMemory ? currentMemory : maxMemory;
+
+        document.getElementById('result').innerText = `Hash: ${tohex(new Uint8Array(hash))}\nTime: ${Math.round(t1-t0)}ms\nMax memory: ${maxMemory/1000000}MB`;
+    }
+</script>
 </body>
 </html>

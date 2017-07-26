@@ -30,7 +30,7 @@ function log(msg) {
 let a;
 async function setup() {
   log('Starting');
-  a = new Sha512_WASM();
+  a = new Sha512WASM();
   await a.init();
   log('Inited');
 }
